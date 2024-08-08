@@ -1,0 +1,491 @@
+---
+title: "Retail Analysis with Walmart Data"
+author: "Cyril Nkuna"
+output: pdf_document
+date: "2024-07-28"
+---
+
+
+```{r}
+# Loading libraries
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(tseries)
+library(readxl)
+library(readr)
+library(dplyr)
+library(janitor)
+library(data.table)
+library(scales)
+library(ggplot2)
+library(dplyr)
+
+```
+
+
+```{r}
+# Loading walmart Data
+df.walmart <- read.csv("C:/Users/Cyril Nkuna/Desktop/desktop/projects/data/Walmart_Store_sales.csv")
+
+```
+
+```{r}
+# Data inspection
+names(df.walmart)
+head(df.walmart)
+str(df.walmart)
+summary(df.walmart)
+```
+
+
+```{r}
+# Total sales for each store
+store_sales <- df.walmart %>%
+  group_by(Store) %>%
+  summarize(Total_Sales = sum(Weekly_Sales))
+
+# Identify the store with the maximum sales
+max_sales_store <- store_sales %>%
+  filter(Total_Sales == max(Total_Sales))
+max_sales_store
+
+# Identify the top 10 stores with the highest sales
+top10_stores_sales <- store_sales %>%
+  mutate(Store = factor(Store)) %>% 
+  arrange(desc(Total_Sales)) %>%
+  head(10)
+
+# Plot the top 10 stores with the highest sales
+topSpeedPlot <- ggplot(top10_stores_sales ,aes(x= reorder(Store, -Total_Sales) , y= Total_Sales, fill=Store)) +
+  geom_bar(stat = "identity") + #theme_bw() +
+  labs(title="Top 10 stores with the highest sales", x = "Store", y = "Total Sales") +
+  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) + 
+  theme(text = element_text(size=12),
+        legend.position = "none", 
+        plot.title = element_text(hjust = 0.5, size = 12, face = "bold"))
+topSpeedPlot
+
+```
+
+## Store 20 has maximum sales with 301,397,792 sales.
+
+
+
+```{r}
+# Which store has the maximum standard deviation in sales?
+
+# Calculating standard deviation and mean of weekly sales for each store.
+store_stats <- df.walmart %>%
+  group_by(Store) %>%
+  summarize(Mean_Sales = mean(Weekly_Sales), SD_Sales = sd(Weekly_Sales))
+
+# Store with the maximum standard deviation
+max_std_store <- store_stats %>%
+  filter(SD_Sales == max(SD_Sales))
+
+# Coefficient of variation
+store_stats <- store_stats %>%
+  mutate(Coef_Variation = SD_Sales / Mean_Sales)
+max_std_store
+
+```
+
+## Store 14 has maximum standard deviation in sales which is 317,569.9.
+
+
+```{r}
+# Which store has a good quarterly growth rate in Q3’2012?
+
+# Convert Date column to Date type and extract year and quarter
+df.q_growth <- df.walmart %>%
+  mutate(Date = as.Date(Date, format = "%d-%m-%Y")) %>% 
+  mutate(Year = year(Date),
+         Quarter = quarter(Date))
+
+# Filter data for Q3 2012
+q3_2012_sales <- df.q_growth %>%
+  filter(Year == 2012 & Quarter == 3) %>%
+  group_by(Store) %>%
+  summarize(Q3_2012_Sales = sum(Weekly_Sales))
+
+# Calculate previous quarter sales for comparison
+q2_2012_sales <- df.q_growth %>%
+  filter(Year == 2012 & Quarter == 2) %>%
+  group_by(Store) %>%
+  summarize(Q2_2012_Sales = sum(Weekly_Sales))
+
+# Calculate growth rate
+growth_rate <- q3_2012_sales %>%
+  left_join(q2_2012_sales, by = "Store") %>%
+  mutate(Growth_Rate = (Q3_2012_Sales - Q2_2012_Sales) / Q2_2012_Sales)
+
+# Identify stores with good growth rate
+good_q_growth_stores <- growth_rate %>%
+  filter(Growth_Rate == max(Growth_Rate))
+good_q_growth_stores
+
+```
+
+## Store 7 has a good quarterly growth rate in Q3’2012 with 0.133 growth rate.
+
+
+```{r}
+# Holidays with higher sales than the mean sales in a non-holiday season.
+
+# Calculating mean sales for non-holiday weeks
+non_holiday_mean_sales <- df.q_growth %>%
+  filter(Holiday_Flag == 0) %>%
+  summarize(Mean_Sales = mean(Weekly_Sales))
+non_holiday_mean_sales
+
+# Filter holiday weeks where Weekly_Sales is greater than non-holiday mean sales
+holiday_sales <- df.q_growth %>%
+  filter(Holiday_Flag == 1) %>% 
+  filter(Weekly_Sales > non_holiday_mean_sales$Mean_Sales) %>% 
+  arrange(desc(Weekly_Sales)) %>% 
+  select(Store, Date, Weekly_Sales, Holiday_Flag) %>% 
+ head(10)
+print(holiday_sales)
+
+```
+
+
+
+```{r}
+# Providing a monthly and semester view of sales in units
+
+# Extracting month and semester from date
+df.view_of_sales <- df.q_growth %>%
+  mutate(Month = month(Date),
+         Semester = if_else(Month <= 6, 1, 2))
+
+# Aggregate sales data by month
+monthly_sales <- df.view_of_sales %>%
+  group_by(Year, Month) %>%
+  summarize(Monthly_Sales = sum(Weekly_Sales))
+
+# Aggregate sales data by semester
+semester_sales <- df.view_of_sales %>%
+  group_by(Year, Semester) %>%
+  summarize(Semester_Sales = sum(Weekly_Sales))
+
+```
+
+```{r}
+# Semester sales plot
+
+# Converting Year and Semester to factor
+semester_sales.1 <- semester_sales %>% 
+  mutate(Year = as.factor(Year),
+         Semester = as.factor(Semester))
+
+# Creating the bar plot
+semester_sales_plot <- ggplot(semester_sales.1, aes(x = Year, y = Semester_Sales,
+                                          fill = Semester)) + 
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) + 
+  labs(title = "Semester Sales by Year and Semester", x = "Year", 
+       y = "Semester Sales") +
+  theme_minimal()
+semester_sales_plot
+```
+
+- The plot shows an increasing trend in sales for Semester 1 from 2010 to 2012. For Semester 2, sales were stable in 2010 and 2011 but dropped significantly in 2012. The sales for Semester 1 of 2010 and Semester 2 of 2012 might be lower due to the reduced duration (approximately 5 months and 4 months respectively) compared to the full 6 months of the other semesters.
+
+- In 2010 and 2011, Semester 2 consistently had higher sales compared to Semester 1. However, in 2012, this pattern changed, with Semester 1 having higher sales than Semester 2. The lower sales in Semester 2 of 2012 might be due to its reduced duration.
+
+
+
+```{r}
+# Building a prediction model to forecast demand For Store 1
+
+# Data preparation for Store 1
+df.store_1 <- df.walmart %>%
+  filter(Store == 1)
+
+# Encode dates as numerical values
+df.store_1 <- df.store_1 %>%
+  mutate(Date_Num = as.numeric(difftime(Date, min(Date), units = "days")) + 1)
+
+# Fit linear regression model
+lin_reg_mod <- lm(Weekly_Sales ~ Date_Num + CPI + Unemployment + Fuel_Price, 
+              data = df.store_1)
+
+# Summarize the model
+summary(lin_reg_mod)
+
+# Predict on the dataset
+df.store_1$Pred_Sales <- predict(lin_reg_mod, df.store_1)
+
+```
+
+- The R-squared = 0.1615 indicate that the model explains only (16.15%) of the variance in Weekly_Sales.
+- The P-values for Date_Num, CPI, and Unemployment are less than 0.05,indicate that they are significant predictors, while the p-value for Fuel_Price greater than 0.05 indicate that it is not significant at 5% level of significance.
+- The model's p-value = 6.389e-05 is very small, indicate that the model is statistically significant.
+
+- Therefore, CPI and Unemployment have a statistically significant impact on sales, as indicated by their low p-values (less than 0.05), while Fuel_Price: does not show a statistically significant impact on sales, since its p-value is greater than 0.05.
+
+
+
+```{r}
+# Linear regression model including the Holiday_Flag
+model_holiday <- lm(Weekly_Sales ~ Date_Num + CPI + Unemployment + Fuel_Price + Holiday_Flag, data = df.store_1)
+
+# Summarize the model
+summary(model_holiday )
+
+# Predict on the dataset
+df.store_1$Pred_Sales2 <- predict(model_holiday, df.store_1)
+
+```
+
+- The R-squared = 0.1968 indicates that approximately 19.68% of the variance in Weekly_Sales is explained by the model.
+- The model's p- value < 0.0001 is very small, indicating the model is statistically significant.
+
+
+Conclusion:
+Adding the Holiday_Flag variable improves the model slightly, as indicated by higher R-squared values and the significant positive coefficient for Holiday_Flag. This suggests holidays have a significant positive impact on sales.
+The main predictors (Date_Num, CPI, Unemployment) remain consistent in their impact across both models.
+Model 2 should be preferred for a slightly better fit and additional insights from the Holiday_Flag variable.
+
+
+# Statistical Model for Store 1 – Build prediction models to forecast demand
+
+
+```{r}
+# Prepare time series data for Store 1
+store_1_ts <- ts(df.store_1$Weekly_Sales, start = c(2010, 2), frequency = 52)
+
+# Create the time series plot
+plot.ts(store_1_ts, xlab = "Date", ylab = "Sales")
+title(main = "Time Series Plot for Store 1")
+
+```
+
+- The plot shows clear seasonal patterns with regular peaks, suggesting a strong seasonal component. The periodic spikes indicate recurring high sales periods, likely due to holidays, promotions, or other events.
+
+- The mean and variance appear relatively constant over time, suggesting that the series may be stationary or at least not showing strong non-stationary behavior.
+
+
+
+
+```{r}
+# Create the seasonal plot for store 1 sales
+
+ggseasonplot(store_1_ts, year.labels = TRUE) +
+  scale_color_manual(values = c("red", "blue", "green")) +
+  labs(title = "Seasonal plot for store 1 sales", y = "Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6),
+        plot.title = element_text(hjust = 0.5))
+```
+
+- There is a clear recurring seasonal pattern in the sales data, with peaks and occurring at roughly the same times each year.
+- Significant spikes in sales are observed in the last weeks of each year, which likely due to holiday shopping periods for Christmas.
+
+
+
+```{r}
+# Check for stationarity
+
+# The Augmented Dicky-Fuller test for store 1 sales
+adf_test <- adf.test(store_1_ts)
+print(adf_test)
+
+```
+
+- The ADF test for stationarity gave a p−value < 0.01, indicating that the data is stationary. 
+
+
+
+
+```{r}
+# Fitting the auto.arima model
+auto_ari.model.fit <- auto.arima(store_1_ts)
+summary(auto_ari.model.fit)
+
+# Checking accuracy
+accuracy(auto_ari.model.fit)
+
+```
+
+- The MAPE (Mean Absolute Percentage Error) = 2.021819 appraximatly 2%. This measures indicate that, on average, the model's predictions deviate from the actual values by about 2%, which is quite accurate.
+
+
+## Model adequacy
+
+
+
+```{r}
+# Diagnostic check
+library(gridExtra)
+
+# Extracting Residuals
+res_1 <- residuals(auto_ari.model.fit)
+
+# Autocorrelation Function (ACF) Plot
+acf_plot <- ggAcf(res_1) + ggtitle("ACF of Residuals") +
+  theme(plot.title = element_text(hjust = 0.5, size = 12))
+
+# Partial Autocorrelation Function (PACF) Plot
+pacf_plot <- ggPacf(res_1) + ggtitle("PACF of Residuals") +
+  theme(plot.title = element_text(hjust = 0.5, size = 12))
+
+# Plotting Residuals
+residuals_plot <- ggplot(data.frame(Time = 1:length(res_1), Residuals = res_1), aes(x = Time, y = Residuals)) +
+  geom_line() +
+  geom_hline(yintercept = 0, col = "red") +
+  labs(title = "Residuals from ARIMA(0,0,0)(0,1,0)[52]", y = "Residuals", x = "Time") +
+  theme(plot.title = element_text(hjust = 0.5, size = 12))
+
+# Combine the ACF, PACF and residual plots
+grid.arrange(acf_plot, pacf_plot, residuals_plot, ncol = 2, top = "Residual Diagnostics for Store 1")
+
+```
+
+- ACF and PACF of residuals plot shows that residuals mostly lack significant autocorrelation, indicating that the ARIMA model has adequately captured the time series structure. There are few spikes which might indicate minor issues, but these are generally not strong enough to suggest a major problem.
+- in the Residuals vs. Time plot, the residuals appear to be centered around zero without obvious patterns, which is good. However, the presence of periods with larger residuals suggests there may be some volatility or outliers that the model didn't fully capture.
+
+
+```{r}
+# Ljung-Box Test
+ljung_box_result <- Box.test(res_1, lag = 11, type = "Ljung-Box")
+print(ljung_box_result)
+```
+
+Box-Ljung test's p-value = 0.3942 > 0.05, it suggests that the residuals from your model do not show significant autocorrelation up to the specified lag.
+
+
+```{r}
+# Assessing whether the residuals are normally distributed
+
+# Shapiro-Wilk Test on the residuals to assess normality
+shapiro_test_result <- shapiro.test(res_1)
+print(shapiro_test_result)
+
+```
+
+Shapiro-Wilk test for normality p-value = 5.316e-08, is significantly less than 0.05. This suggests that the data is not normally distributed.
+
+
+In evaluating the Model adequacy, first the residuals from Model02 were plotted against time to
+asses their behavior over time. It was observed that the residuals are randomly scattered around
+the zero line, suggesting that their mean is zero. Secondly, their normality was tested with the Shapiro-Wilk test for normality. The test resulted in a p−value of 0.2407, hence the null hypothesis of normality was not rejected.
+
+
+```{r}
+# The Histogram and Normal Q-Q Plot
+par(mfrow = c(1, 2))
+hist(res_1, main="Histogram of Residuals", xlab="Residuals")
+qqnorm(res_1)
+qqline(res_1, col="red")
+```
+
+
+- Histogram of residuals shows the distribution of the residuals. In the histogram, the distribution seems somewhat centered, but it might be slightly skewed or have outliers. For normally distributed residuals, the histogram is expected to form a bell-shaped.
+- The normal Q-Q plot shows that some points/residuals are deviating from the red line, particularly at the tails, indicating possible deviations from normality.
+
+- The histogram and the Q-Q plot support the Shapiro-Wilk test for normality that the data is not normally distributed.
+
+
+### Training, testing , and forecasting
+
+```{r}
+
+# Split the data into training and test sets
+train_size <- floor(0.8 * length(store_1_ts))
+train_ts <- window(store_1_ts, end = c(2010 + (train_size - 1) %/% 52, (train_size - 1) %% 52 + 1))
+test_ts <- window(store_1_ts, start = c(2010 + train_size %/% 52, train_size %% 52 + 1))
+
+# Fit the auto.arima model to the training set
+mod.1 <- auto.arima(train_ts)
+print(mod.1)
+
+# Generate forecasts for the test period
+mod.1_forecast <- forecast(mod.1, h = length(test_ts))
+
+# Convert time series objects to data frames for ggplot2
+actuals_train_df <- data.frame(Time = as.numeric(time(train_ts)),
+                               Sales = as.numeric(train_ts) )
+
+actuals_test_df <- data.frame(Time = as.numeric(time(test_ts)),
+                              Sales = as.numeric(test_ts) )
+
+forecasts_df <- data.frame(Time = as.numeric(time(mod.1_forecast$mean)),
+                           Sales = as.numeric(mod.1_forecast$mean),
+                           Lower_95 = as.numeric(mod.1_forecast$lower[, 2]),
+                           Upper_95 = as.numeric(mod.1_forecast$upper[, 2]) )
+
+# Plot with ggplot2
+ggplot() +
+  geom_line(data = actuals_train_df, aes(x = Time, y = Sales, color = "Training Data"), size = 1) +
+  geom_line(data = actuals_test_df, aes(x = Time, y = Sales, color = "Test Data"), size = 1) +
+  geom_line(data = forecasts_df, aes(x= Time, y= Sales, color= "Forecasted Values"), size = 1, linetype = "dashed") +
+  #geom_ribbon(data = forecasts_df, aes(x= Time, ymin= Lower_95, ymax= Upper_95), fill= "grey80", alpha= 0.5) +
+  labs(title = "Store 1 Sales Forecast", x = "Time", y = "Sales") +
+  scale_color_manual(name = "", values = c("Training Data" = "blue", "Test Data" = "black", "Forecasted Values" = "red")) +
+  theme_minimal() +
+  theme(
+    legend.position = c(0.85, 0.85),
+    legend.background = element_rect(fill = "white", color = "black"),
+    legend.title = element_blank()
+  )
+
+
+```
+
+- The forecasted values represent the model's predictions for the test period. The forecasted values  (red dashed line) closely follows the test data (black line), indicating how well the model's predictions align with the actual sales data, though there are some deviations.
+
+
+```{r}
+# model’s forecasting performance a 95% confidence interval
+
+forecasts_df <- data.frame(
+  Time = as.numeric(time(mod.1_forecast$mean)),
+  Sales = as.numeric(mod.1_forecast$mean),
+  Lower_95 = as.numeric(mod.1_forecast$lower[, 2]),
+  Upper_95 = as.numeric(mod.1_forecast$upper[, 2])
+)
+
+# Plot test set, forecasted values, and confidence intervals as lines with ggplot2
+ggplot() +
+  geom_line(data = actuals_test_df, aes(x = Time, y = Sales, color = "Test Data"), size = 1) +
+  geom_line(data = forecasts_df, aes(x = Time, y = Sales, color = "Forecasted Values"), size = 1) +
+  geom_line(data = forecasts_df, aes(x = Time, y = Lower_95, color = "95% Confidence Interval"), size = 0.8, linetype = "dashed") +
+  geom_line(data = forecasts_df, aes(x = Time, y = Upper_95, color = "95% Confidence Interval"), size = 0.8, linetype = "dashed") +
+  labs(title = "Store 1 Sales Forecast (Test Period)", x = "Time", y = "Sales") +
+  scale_color_manual(name = "Legend", 
+                     values = c("Test Data" = "black", 
+                                "Forecasted Values" = "red", 
+                                "95% Confidence Interval" = "blue")) +
+  theme_minimal() +
+  theme(
+    legend.position = c(0.85, 0.85),  # Adjust these coordinates to move the legend
+    legend.background = element_rect(fill = "white", color = "black"),
+    legend.title = element_blank()
+  )
+
+```
+
+
+- To further evaluate the the model’s forecasting performance a 95% confidence interval for the forecasted values was obtained and superimposed in the plot of both the forecasts and the test set.The resulted plot revealed that confidence intervals of most forecasted values includes the actual values, indicating that the model’s predictions are generally reliable.
+
+
+## Summary and conclusion
+
+The ARIMA(0,0,0)(0,1,0)[52] was used to forecast store 1 sales. The Augmented Dick-Fuller test was employed to test for the stationarity of the data where the test resulted in p−value of less than 0.01 thus not rejecting the null hypothesis of stationarity.
+
+The fitted model’s residuals were tested for normality and independence using the Shapiro-Wilk and Ljung-Box test respectively. The normality test gave a p−value of 5.316e-08 which is very small, indicated that the residuals were not normally distributed at 5% level of significance. The Ljung-Box test for independency gave a p−value of 0.3942, indicated that the residuals were distributed independently at 5% level of significance. Thus the residuals were concluded to be white noise.
+
+The data was then split into training and testing sets where the training set was employed to
+estimate the model.
+
+The fitted model’s forecasting accuracy was measured by comparing the 30 weeks forecasts by the model with the test set values, and minimal differences were observed. The model does a reasonably good job of predicting the test period sales, with most forecasted values closely following the actual sales data. The presence of a few outliers where actual sales fall outside the confidence interval suggests there might be areas where the model can be improved.
+
+Moreover, fitted model gave the MAPE (Mean Absolute Percentage Error) of 2.021819, indicated that, on average, the model's predictions deviate from the actual values by about 2%, which is quite accurate.
+
+To further evaluate the the model’s forecasting performance a 95% confidence interval for the
+forecasted values was obtained and superimposed in the plot of both the forecasts and the test set. The wide confidence intervals indicated that while the model is useful, there is some uncertainty in its predictions, and this should be considered when using these forecasts for decision-making.
+
+There might be room to refine the model to reduce uncertainty or better capture the factors leading to the discrepancies seen in certain periods.

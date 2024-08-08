@@ -1,0 +1,336 @@
+---
+title: "Healthcare Cost Analysis"
+author: "Cyril"
+date: "2024-06-14"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+
+
+```{r}
+# Loading Libraries
+library(tidyverse)
+library(readxl)
+library(readr)
+library(dplyr)
+library(janitor)
+library(data.table)
+library(scales)
+library(data.table)
+library(ggplot2)
+library(dplyr)
+```
+
+
+```{r}
+# Loading data
+df.1 <- read_excel("data/hospitalcosts.xlsx")
+
+str(df.1)
+head(df.1)
+names(df.1)
+# Summary Statistics
+summary(df.1)
+```
+
+
+# Data Analysis
+
+```{r}
+# Data manipulation
+df.1 <- df.1 %>%
+  mutate(Gender = ifelse(FEMALE==1,"Female",ifelse(FEMALE==0,"Male", NA))) %>% 
+  mutate(RACE = as.factor(RACE)) %>% mutate(APRDRG = as.factor(APRDRG))
+```
+
+
+```{r}
+# Pie chart for male and female distribution
+df.gender <- df.1 %>% filter(!is.na(Gender)) %>%  group_by(Gender) %>%
+  summarise(Patients = n())
+
+gender.plot <- ggplot(df.gender, aes(x = Gender, y = Patients, fill= Gender)) + 
+  geom_bar(stat = "identity") +
+  geom_text(aes(y = Patients, label = paste0(Patients), 
+                vjust = 1, hjust= 1), angle = 0, size =3) +
+  labs(title = "Patients by Gender") +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+gender.plot
+
+```
+
+The plot shows that there are slightly more female that males than females, with 256 males and 244 males.
+
+
+```{r}
+## Age category of patients who frequent the hospital.
+
+df.age_gender <- df.1 %>%
+  mutate(AgeGroup = case_when(
+    AGE < 3 ~ "0-2",
+    AGE < 6 ~ "3-5",
+    AGE < 9 ~ "6-8",
+    AGE < 12 ~ "9-11",
+    AGE < 15 ~ "12-14",
+    AGE > 14 ~ "15-17")) %>% 
+# Convert to factor
+  mutate(AgeGroup = factor(AgeGroup,
+      level = c("0-2", "3-5","6-8", "9-11", "12-14", "15-17")))
+
+# Age category bar plot
+age_gender_plot <- ggplot(df.age_gender, aes(x = AgeGroup, fill = Gender)) + 
+  geom_bar(position = "stack") +
+  labs(title = "Age category of patients who frequent the hospital") +
+  theme(plot.title = element_text(hjust = 0.5))
+age_gender_plot
+
+```
+
+The plot shows that the age 0-2 has the highest number of hospitalizations and the majority of hospitalizations in this age group are males.
+
+
+```{r}
+# Summarize and finding the maximum expenditure Age
+age.expenditure <- df.age_gender %>% group_by(AGE) %>% 
+  summarise("Total Expenditure" = sum(TOTCHG, na.rm = T), Patients = n()) %>% 
+  select(AGE, Patients, `Total Expenditure`)
+#age.expenditure
+
+# Most frequent age 
+max_patients <- age.expenditure %>% select(AGE, Patients) %>% filter(Patients == max(Patients))
+max_patients
+
+# Less frequent age 
+less_patients <- age.expenditure %>% select(AGE, Patients) %>% filter(Patients == min(Patients))
+less_patients
+
+# Maximum expenditure by age
+max_expenditure <- age.expenditure %>% slice(1)
+max_expenditure
+
+# Lowest expenditure by age
+lowest_expenditure <- age.expenditure %>% filter(`Total Expenditure` == min(`Total Expenditure`))
+lowest_expenditure
+
+```
+
+- Age 0 with 307 patients is the most frequent among the frequent patients who frequent the hospital and incurs the highest expenditure of 678118 units.
+
+- Age 2 with one (1) patient is the less frequent in the hospital. and Age 8 with two (2) patients is the incurs the lowest expenditure of 4741 units.
+
+
+
+```{r}
+# Hospitalization and Expenditure of Diagnosis Related Groups(APRDRG)
+df.aprdrg <-  df.1 %>% group_by(APRDRG) %>% 
+  summarise(TOTCHG = sum(TOTCHG, na.rm = T), LOS = sum(LOS, na.rm = T), Patients = n()) %>%
+  select(APRDRG, TOTCHG, Patients, LOS) %>% 
+  arrange(desc(TOTCHG))
+
+```
+
+
+```{r}
+# Top 10 Diagnosis Group by Expenditure
+#top10 <- df.aprdrg %>% arrange(desc(TOTCHG)) %>% head(10)
+
+#ggplot(top10, aes(x = reorder(APRDRG, -TOTCHG), y = TOTCHG, fill = APRDRG)) +
+#  geom_bar(stat = "identity") +
+#  labs(x= "Diagnosis Group", y= "Expenditure", title = "Top 10 Diagnosis Group by Expenditure") +
+#  scale_y_continuous(labels = comma) +
+#  theme(legend.position = "none", plot.title = element_text(hjust = 0.5)) 
+  
+```
+
+
+```{r}
+library(gridExtra)
+
+# Top 5 Diagnosis Group by Expenditure
+top5 <- df.aprdrg %>% arrange(desc(TOTCHG)) %>% head(5)
+
+# Custom labeling function
+custom_label <- function(x){
+  ifelse(x >= 1000, paste0(x/1000, "k"), as.character(x))
+}
+
+# Creating a plot for the top 5 diagnosis groups by expenditure
+top5plot <- ggplot(top5, aes(x = reorder(APRDRG, -TOTCHG), y = TOTCHG, fill = APRDRG)) +
+  geom_bar(stat = "identity") +
+  labs(x= "Diagnosis Group", y= "Expenditure", title = "Top 5 Diagnosis Group by Expenditure") +
+  scale_y_continuous(labels = custom_label) +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5, size = 10, face = "bold"))
+
+# Bottom 5 Diagnosis Group by Expenditure
+bottom5 <- df.aprdrg %>% arrange(desc(TOTCHG)) %>% tail(5)
+
+# Creating a plot for the bottom 5 diagnosis groups by expenditure
+bottom5_plot <- ggplot(bottom5, aes(x = reorder(APRDRG, -TOTCHG), y = TOTCHG, fill = APRDRG)) +
+  geom_bar(stat = "identity") +
+  labs(x= "Diagnosis Group", y= "Expenditure", title = "Bottom 5 Diagnosis Group by Expenditure") +
+  scale_y_continuous(labels = custom_label) +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5, size = 10, face = "bold"))
+
+# Arrange all plots in a grid
+#grid.arrange(top5plot, bottom5_plot, ncol = 2)
+
+#---------------------------------------------------------------------------------------------------
+
+# Top 5 Diagnosis Group by hospitalization
+top5_hos <- df.aprdrg %>% arrange(desc(Patients)) %>% head(5)
+
+# Creating a a plot for the top 5 diagnosis group by hospitalization
+top5_hosPlot <- ggplot(top5_hos, aes(x = reorder(APRDRG, -Patients), y = Patients, fill = APRDRG)) +
+  geom_bar(stat = "identity") +
+  labs(x= "Diagnosis Group", y= "No. of patients", title = "Top 5 Diagnosis Group by Hospitalization") +
+  scale_y_continuous(labels = custom_label) +
+  #theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5, size = 10, face = "bold"))
+
+# Bottom 5 Diagnosis Group by hospitalization
+bottom5hos <- df.aprdrg %>% arrange(desc(Patients)) %>% tail(5)
+
+# Creating a a plot for the bottom 5 diagnosis group by hospitalization
+bottom5_hosPlot <- ggplot(bottom5hos, aes(x = reorder(APRDRG, -Patients), y = Patients, fill = APRDRG)) +
+  geom_bar(stat = "identity") +
+  labs(x= "Diagnosis Group", y= "No. of patients", title = "Bottom 5 Diagnosis Group by Hospitalization") +
+  scale_y_continuous(labels = custom_label) +
+  #theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5, size = 10, face = "bold"))
+
+# Arrange all plots in a grid
+#grid.arrange(top5_hosPlot, bottom5_hosPlot, ncol = 2)
+grid.arrange(top5plot, bottom5_plot, top5_hosPlot, bottom5_hosPlot, ncol = 2, top = "Diagonsis Groups")
+```
+
+
+- Diagnosis group 640 incurs a highest expenditure of over 400k units. This group also has the highest number of hospitalization, with over 250 patients.
+
+- In the plot showing the bottom 5 diagnosis groups by expenditure, diagnosis group 154 has the lowest expenditure, just over 500 units. in the plot showing the bottom 5 diagnosis groups by hospitalization, each of the bottom 5 diagnosis groups, including diagnosis group 254, has only one patient.
+
+
+```{r}
+# Calculating diagnosis group treatments cost per day
+costperday.df <- df.1 %>% 
+  mutate(CostPerDay = ifelse(LOS == 0, TOTCHG, round(TOTCHG/LOS,0))) %>% 
+  group_by(APRDRG) %>% summarise(AverageCostPerDay = mean(CostPerDay)) %>% 
+  distinct(APRDRG, .keep_all = TRUE) %>% 
+  arrange(desc(AverageCostPerDay))
+  
+# Most Expensive Diagnosis Group Treatment 
+mostExpensive.treatment <- costperday.df %>% 
+  #select(APRDRG, AverageCostPerDay) %>% 
+  filter(AverageCostPerDay == max(AverageCostPerDay))
+mostExpensive.treatment
+
+# Less Expensive Diagnosis Group Treatment 
+lessExpensive.treatment <- costperday.df %>% 
+  #select(APRDRG, AverageCostPerDay) %>% 
+  filter(AverageCostPerDay == min(AverageCostPerDay))
+lessExpensive.treatment
+
+# Top 10 Expensive Diagnosis Group Treatments
+exp_treat.df <- costperday.df %>% arrange(desc(AverageCostPerDay)) %>% head(10)
+
+# Creating a plot for the top 5 expensive diagnosis group treatment
+mostExpTreatPlot <- ggplot(exp_treat.df, aes(x = reorder(APRDRG, -AverageCostPerDay), y = AverageCostPerDay,
+                                         fill = APRDRG)) +
+  geom_bar(stat = "identity") +
+  labs(x= "Diagnosis Group", y= "Cost/Day", title = "Top 10 most expensinve diagnosis group treatments") +
+  geom_text(aes(y = AverageCostPerDay, label= comma(AverageCostPerDay)), vjust= -0.5, hjust = 0.5, size = 3) +
+  scale_y_continuous(labels = custom_label) +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  coord_cartesian(ylim = c(0, max(exp_treat.df$AverageCostPerDay)*1.1))
+#mostExpTreatPlot
+
+# Less Expensive Diagnosis Group Treatments
+leastTreatCost <- costperday.df %>% arrange(desc(AverageCostPerDay)) %>% tail(10)
+
+# Creating a plot for the least expensive diagnosis groups treatments
+leastTreatCostPlot <- ggplot(leastTreatCost, aes(x=reorder(APRDRG, -AverageCostPerDay), y = AverageCostPerDay,
+                                               fill = APRDRG)) +
+  geom_bar(stat = "identity") +
+  labs(x= "Diagnosis Group", y= "Cost/Day", title = "Ten(10) least expensive diagnosis group treatments") +
+  geom_text(aes(y= AverageCostPerDay, label= comma(AverageCostPerDay)), vjust= -0.5, hjust= 0.5, size= 3) +
+  scale_y_continuous(labels = custom_label) +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  coord_cartesian(ylim = c(0, max(leastTreatCost$AverageCostPerDay)*1.1))
+#leastTreatCostPlot
+
+# Arrange all plots in a grid
+grid.arrange(mostExpTreatPlot, leastTreatCostPlot, ncol = 1, top = "Diagnosis Group Cost Per day")
+
+```
+
+
+- Diagnosis group 92 has the highest treatment cost, amounting to 12,024 units per day spent in the hospital. This indicates that treatments for this diagnosis group are more costly compared to other diagnosis groups.
+- Furthermore, diagnosis group 863 incurs the lowest average treatment cost, with an expense of 543 units per day in the hospital. This group's treatment costs are relatively lower compared to other diagnosis groups.
+
+
+
+
+# Analysing if the race of the patient is related to the hospital cost.
+
+```{r}
+# Race of the patient and hospital cost
+df.race <- df.1 %>% filter(!is.na(RACE))
+race_cost.anova <- aov(TOTCHG ~ RACE, df.race)
+summary(race_cost.anova)
+```
+
+## Hypothesis Testing
+
+$H_0$: The race of the patient is not related to hospitalization cost.
+
+$H_1$: The race of the patient is related to hospitalization cost.
+
+
+The $p-value$ = 0.943. Since the p-value = 0.943 > 0.05, we fail to reject the null hypothesis, and conclude that there's no evidence that the to suggest that the race of the patient is related to the hospital cost.
+
+
+
+# Analyzing the severity of the hospital cost by age and gender for proper allocation of resources.
+
+```{r}
+# linear model
+
+lmod.1 <- lm(TOTCHG ~ AGE + Gender, df.1)
+summary(lmod.1)
+```
+
+- The predictor variables (Age and Gender) has the p-value of 0.000808 and 0.036382 respectively.Since the p-value of predictor variable is less than 0.05, therefore the Age and Gender are statistically significant predictors of hospital costs (TOTCHG), with cost increasing with age and being high for Male.
+
+- Furthermore, the coefficient of determination (R-Squared) = 0.0261 is very low,means that only 2.61% of the variation is explained by the two predictors. This indicate that there may be other important predictors in explaining the variation in the hospital costs that are not included in the model.
+
+
+
+# Analyzing if the length of stay can be predicted from age, gender and race
+
+```{r}
+# linear model
+lmod.2 <- lm(LOS ~ AGE + Gender + RACE,  df.1)
+summary(lmod.2)
+```
+
+- The coefficient of determination (R-squared) = 0.008699 is very small. This means that the three predictors Age, Gender, and Race explains 0.808% of the variation in the response variable (LOS).
+- Each predictor variable has a p-value greater than the critical value ($\alpha$ = 0.05). This implies that the predictor are not significant predictors of length of stay (LOS).
+_ The F-statistic = 0.6156 with a p-value of 0.7432 > 0.05, shows that the model statistically insignificant.
+
+
+
+# Finding variables that mainly affects the hospital cost.
+
+
+```{r}
+# linear model
+df.mod3 <- df.1 %>% na.omit() #%>% mutate(AGE = as.factor(AGE))
+lmod.3 <- lm(TOTCHG ~ AGE + Gender + RACE + LOS + APRDRG, df.mod3)
+summary(lmod.3)
+```
+
+
+- The p-value of predictor variables gender and race are greater than 0.05. This implies that their effect in hospital costs (TOTCHG) is statistically insignificant. Hence, we would consider removing them from the model.
+- Age, LOS, and certain APRDRG predictor variables with p-value < 0.05 have significant relationship with hospital costs (TOTCHG).This implies that Age, LOS, and APRDRG affects the hospital cost.
+
