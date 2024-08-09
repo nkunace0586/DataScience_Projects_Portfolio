@@ -26,7 +26,7 @@ library(dplyr)
 
 ```{r}
 # Loading data
-df.1 <- read_excel("data/hospitalcosts.xlsx")
+df.1 <- read_excel("hospitalcosts.xlsx")
 
 str(df.1)
 head(df.1)

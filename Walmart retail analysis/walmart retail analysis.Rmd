@@ -20,15 +20,17 @@ library(data.table)
 library(scales)
 library(ggplot2)
 library(dplyr)
+library(here)
 
 ```
 
 
 ```{r}
 # Loading walmart Data
-df.walmart <- read.csv("C:/Users/Cyril Nkuna/Desktop/desktop/projects/data/Walmart_Store_sales.csv")
+df.walmart <- read.csv(here("Walmart retail analysis", "Walmart_Store_sales.csv"))
 
 ```
+
 
 ```{r}
 # Data inspection
